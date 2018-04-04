@@ -1843,6 +1843,102 @@ func addInvoice(ctx *cli.Context) error {
 	return nil
 }
 
+var addPolicyCommand = cli.Command{
+	Name:  "addpolicy",
+	Usage: "Add a new invoice.",
+	Description: `
+	Add a new invoice, expressing intent for a future payment.
+
+	Invoices without an amount can be created by not supplying any
+	parameters or providing an amount of 0. These invoices allow the payee
+	to specify the amount of satoshis they wish to send.`,
+	ArgsUsage: "value preimage",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name: "paymenthash",
+			Usage: "a description of the payment to attach along " +
+				"with the invoice (default=\"\")",
+		},
+		cli.Int64Flag{
+			Name:  "fee",
+			Usage: "the amt of satoshis in this invoice",
+		},
+	},
+	Action: actionDecorator(addPolicy),
+}
+
+func addPolicy(ctx *cli.Context) error {
+	var (
+		fee int64
+		err error
+	)
+
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	args := ctx.Args()
+
+	switch {
+	case ctx.IsSet("fee"):
+		fee = ctx.Int64("fee")
+	case args.Present():
+		fee, err = strconv.ParseInt(args.First(), 10, 64)
+		args = args.Tail()
+		if err != nil {
+			return fmt.Errorf("unable to decode amt argument: %v", err)
+		}
+	default:
+		return fmt.Errorf("requires fee: %v", err)
+
+	}
+
+	var paymentHash string
+	switch {
+	case ctx.IsSet("paymenthash"):
+		paymentHash = ctx.String("paymenthash")
+	case args.Present():
+		paymentHash = args.First()
+	default:
+		return fmt.Errorf("requires paymenthash: %v", err)
+	}
+
+	policy := &lnrpc.Policy{
+		PaymentHash: paymentHash,
+		Fee:         fee,
+	}
+
+	resp, err := client.AddPolicy(context.Background(), policy)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(resp)
+
+	return nil
+}
+
+var listPoliciesCommand = cli.Command{
+	Name:   "listpolicies",
+	Usage:  "List all invoices currently stored.",
+	Action: actionDecorator(listPolicies),
+}
+
+func listPolicies(ctx *cli.Context) error {
+	client, cleanUp := getClient(ctx)
+	defer cleanUp()
+
+	req := &lnrpc.ListPoliciesRequest{}
+
+	policies, err := client.ListPolicies(context.Background(), req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(policies)
+
+	return nil
+}
+
 var lookupInvoiceCommand = cli.Command{
 	Name:      "lookupinvoice",
 	Usage:     "Lookup an existing invoice by its payment hash.",

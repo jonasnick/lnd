@@ -385,6 +385,24 @@ service Lightning {
         };
     }
 
+    /** lncli: `addinvoice`
+    AddInvoice attempts to add a new invoice to the invoice database. Any
+    duplicated invoices are rejected, therefore all invoices *must* have a
+    unique payment preimage.
+    */
+    rpc AddPolicy (Policy) returns (AddPolicyResponse) {
+        option (google.api.http) = {
+            post: "/v1/policies"
+            body: "*"
+        };
+    }
+
+    rpc ListPolicies (ListPoliciesRequest) returns (ListPoliciesResponse) {
+        option (google.api.http) = {
+            get: "/v1/policies"
+        };
+    }
+
     /** lncli: `listinvoices`
     ListInvoices returns a list of all the invoices currently stored within the
     database. Any active debug invoices are ignored.
@@ -1555,6 +1573,24 @@ message DeleteAllPaymentsRequest {
 }
 
 message DeleteAllPaymentsResponse {
+}
+
+message Policy {
+    /// The payment hash
+    string payment_hash = 1 [json_name = "payment_hash"];
+
+    /// The value of the payment in satoshis
+    int64 fee = 2 [json_name = "fee"];
+}
+
+message ListPoliciesRequest {
+}
+
+message ListPoliciesResponse {
+    repeated Policy policies = 1 [json_name = "policies"];
+}
+
+message AddPolicyResponse {
 }
 
 message DebugLevelRequest {

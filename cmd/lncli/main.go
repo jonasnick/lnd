@@ -210,6 +210,8 @@ func main() {
 		sendPaymentCommand,
 		payInvoiceCommand,
 		addInvoiceCommand,
+		addPolicyCommand,
+		listPoliciesCommand,
 		lookupInvoiceCommand,
 		listInvoicesCommand,
 		listChannelsCommand,

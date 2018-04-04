@@ -233,6 +233,14 @@ var (
 			Entity: "invoices",
 			Action: "read",
 		}},
+		"/lnrpc.Lightning/AddPolicy": {{
+			Entity: "invoices",
+			Action: "write",
+		}},
+		"/lnrpc.Lightning/ListPolicies": {{
+			Entity: "invoices",
+			Action: "read",
+		}},
 		"/lnrpc.Lightning/SubscribeTransactions": {{
 			Entity: "onchain",
 			Action: "read",
@@ -2121,6 +2129,63 @@ func (r *rpcServer) SendPaymentSync(ctx context.Context,
 		PaymentPreimage: preImage[:],
 		PaymentRoute:    marshallRoute(route),
 	}, nil
+}
+
+func (r *rpcServer) AddPolicy(ctx context.Context,
+	policy *lnrpc.Policy) (*lnrpc.AddPolicyResponse, error) {
+	var paymentHash [32]byte
+
+	switch {
+	// Otherwise, if a preimage was specified, then it MUST be exactly
+	// 32-bytes.
+	case len(policy.PaymentHash) > 0 && len(policy.PaymentHash) != 64:
+		return nil, fmt.Errorf("payment preimage must be exactly "+
+			"64 bytes, is instead %v", len(policy.PaymentHash))
+
+	// If the preimage meets the size specifications, then it can be used
+	// as is.
+	default:
+		p, err := hex.DecodeString(policy.PaymentHash)
+		if err != nil {
+			return nil, err
+		}
+		copy(paymentHash[:], p[:])
+	}
+
+	fee := lnwire.MilliSatoshi(policy.Fee)
+	policy2 := channeldb.Policy{
+		PaymentHash: paymentHash,
+		Fee:         fee,
+	}
+	err := r.server.chanDB.AddPolicy(&policy2)
+	if err != nil {
+		return nil, err
+	}
+
+	return &lnrpc.AddPolicyResponse{}, nil
+}
+
+func (r *rpcServer) ListPolicies(ctx context.Context,
+	_ *lnrpc.ListPoliciesRequest) (*lnrpc.ListPoliciesResponse, error) {
+
+	rpcsLog.Debugf("[ListPolicies]")
+
+	policies, err := r.server.chanDB.FetchAllPolicies()
+	if err != nil && err != channeldb.ErrNoPaymentsCreated {
+		return nil, err
+	}
+
+	policiesResp := &lnrpc.ListPoliciesResponse{
+		Policies: make([]*lnrpc.Policy, len(policies)),
+	}
+	for i, policy := range policies {
+		policiesResp.Policies[i] = &lnrpc.Policy{
+			PaymentHash: hex.EncodeToString(policy.PaymentHash[:]),
+			Fee:         int64(policy.Fee),
+		}
+	}
+
+	return policiesResp, nil
 }
 
 // AddInvoice attempts to add a new invoice to the invoice database. Any

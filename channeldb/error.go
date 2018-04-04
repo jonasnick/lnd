@@ -27,6 +27,10 @@ var (
 	// our database to return.
 	ErrNoInvoicesCreated = fmt.Errorf("there are no existing invoices")
 
+	ErrPolicyNotFound = fmt.Errorf("unable to locate policy")
+
+	ErrNoPoliciesCreated = fmt.Errorf("there are no existing policies")
+
 	// ErrDuplicateInvoice is returned when an invoice with the target
 	// payment hash already exists.
 	ErrDuplicateInvoice = fmt.Errorf("invoice with payment hash already exists")

@@ -690,6 +690,47 @@
         ]
       }
     },
+    "/v1/policies": {
+      "get": {
+        "operationId": "ListPolicies",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/lnrpcListPoliciesResponse"
+            }
+          }
+        },
+        "tags": [
+          "Lightning"
+        ]
+      },
+      "post": {
+        "summary": "* lncli: `addinvoice`\nAddInvoice attempts to add a new invoice to the invoice database. Any\nduplicated invoices are rejected, therefore all invoices *must* have a\nunique payment preimage.",
+        "operationId": "AddPolicy",
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/lnrpcAddPolicyResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/lnrpcPolicy"
+            }
+          }
+        ],
+        "tags": [
+          "Lightning"
+        ]
+      }
+    },
     "/v1/switch": {
       "post": {
         "summary": "* lncli: `fwdinghistory`\nForwardingHistory allows the caller to query the htlcswitch for a record of\nall HTLC's forwarded within the target time range, and integer offset\nwithin that time range. If no time-range is specified, then the first chunk\nof the past 24 hrs of forwarding history are returned.",
@@ -919,6 +960,9 @@
           "description": "*\nA bare-bones invoice for a payment within the Lightning Network.  With the\ndetails of the invoice, the sender has all the data necessary to send a\npayment to the recipient."
         }
       }
+    },
+    "lnrpcAddPolicyResponse": {
+      "type": "object"
     },
     "lnrpcChannel": {
       "type": "object",
@@ -1744,6 +1788,17 @@
         }
       }
     },
+    "lnrpcListPoliciesResponse": {
+      "type": "object",
+      "properties": {
+        "policies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/lnrpcPolicy"
+          }
+        }
+      }
+    },
     "lnrpcNetworkInfo": {
       "type": "object",
       "properties": {
@@ -2108,6 +2163,20 @@
         "output_index": {
           "type": "integer",
           "format": "int64"
+        }
+      }
+    },
+    "lnrpcPolicy": {
+      "type": "object",
+      "properties": {
+        "payment_hash": {
+          "type": "string",
+          "title": "/ The payment hash"
+        },
+        "fee": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ The value of the payment in satoshis"
         }
       }
     },
