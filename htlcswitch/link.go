@@ -235,6 +235,8 @@ type ChannelLinkConfig struct {
 	// in testing, it is here to ensure the sphinx replay detection on the
 	// receiving node is persistent.
 	UnsafeReplay bool
+
+	ChanDB *channeldb.DB
 }
 
 // channelLink is the service which drives a channel's commitment update
@@ -1655,6 +1657,25 @@ func (l *channelLink) HtlcSatifiesPolicy(payHash [32]byte,
 		}
 
 		return failure
+	}
+
+	if l.cfg.ChanDB != nil {
+		paymentPolicy, err := l.cfg.ChanDB.LookupPolicy(payHash)
+		if err != nil && err != channeldb.ErrPolicyNotFound && err != channeldb.ErrNoPoliciesCreated {
+			log.Errorf("Couldn't look up payment hash in policy database: %v", err)
+			return lnwire.NewTemporaryChannelFailure(nil)
+		} else if err != nil {
+			/* pass */
+		} else {
+			if actualFee < paymentPolicy.Fee {
+				log.Errorf("Oh a payment")
+				log.Errorf("Incoming htlc(%x) requires matching payment policy but has insufficient "+
+					"fee for: expected %v, got %v", payHash,
+					int64(paymentPolicy.Fee),
+					int64(actualFee))
+				return lnwire.NewTemporaryChannelFailure(nil)
+			}
+		}
 	}
 
 	return nil

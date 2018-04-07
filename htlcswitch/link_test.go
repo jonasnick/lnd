@@ -483,6 +483,95 @@ func TestChannelLinkMultiHopPayment(t *testing.T) {
 	}
 }
 
+func testChannelPaymentPolicyHelper(t *testing.T, n *threeHopNetwork, hops []ForwardingInfo, amount lnwire.MilliSatoshi, htlcAmt lnwire.MilliSatoshi, totalTimelock uint32, paymentFee lnwire.MilliSatoshi, fail bool) {
+	receiver := n.carolServer
+	paymentResponse, htlc := n.makePayment1(n.aliceServer, n.carolServer,
+		n.bobServer.PubKey(), hops, amount, htlcAmt,
+		totalTimelock)
+
+	n.bobServer.htlcSwitch.cfg.DB.AddPolicy(&channeldb.Policy{PaymentHash: paymentResponse.rhash, Fee: paymentFee})
+
+	go func() {
+		_, err := n.aliceServer.htlcSwitch.SendHTLC(n.bobServer.PubKey(), htlc,
+			newMockDeobfuscator())
+		paymentResponse.err <- err
+	}()
+
+	select {
+	case err := <-paymentResponse.err:
+		close(paymentResponse.err)
+		if err != nil && !fail {
+			t.Fatalf("error while paying: %v", err)
+		} else if fail && err == nil {
+			t.Fatalf("No forwarding error but there should be one, due to payment fee not met")
+		} else if fail {
+			/* test succeeds */
+			return
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatalf("unable to send payment: htlc was no settled in time")
+	}
+
+	// Wait for Bob to receive the revocation.
+	time.Sleep(100 * time.Millisecond)
+
+	// Check that Carol invoice was settled and bandwidth of HTLC
+	// links were changed.
+	invoice, err := receiver.registry.LookupInvoice(paymentResponse.rhash)
+	if err != nil {
+		t.Fatalf("unable to get invoice: %v", err)
+	}
+	if !invoice.Terms.Settled {
+		t.Fatal("carol invoice haven't been settled")
+	}
+}
+
+func TestChannelPaymentPolicy(t *testing.T) {
+	t.Parallel()
+
+	channels, cleanUp, _, err := createClusterChannels(
+		btcutil.SatoshiPerBitcoin*3,
+		btcutil.SatoshiPerBitcoin*5)
+	if err != nil {
+		t.Fatalf("unable to create channel: %v", err)
+	}
+	defer cleanUp()
+
+	n := newThreeHopNetwork(t, channels.aliceToBob, channels.bobToAlice,
+		channels.bobToCarol, channels.carolToBob, testStartingHeight)
+	if err := n.start(); err != nil {
+		t.Fatal(err)
+	}
+	defer n.stop()
+
+	debug := false
+	if debug {
+		// Log messages that alice receives from bob.
+		n.aliceServer.intersect(createLogFunc("[alice]<-bob<-carol: ",
+			n.aliceChannelLink.ChanID()))
+
+		// Log messages that bob receives from alice.
+		n.bobServer.intersect(createLogFunc("alice->[bob]->carol: ",
+			n.firstBobChannelLink.ChanID()))
+
+		// Log messages that bob receives from carol.
+		n.bobServer.intersect(createLogFunc("alice<-[bob]<-carol: ",
+			n.secondBobChannelLink.ChanID()))
+
+		// Log messages that carol receives from bob.
+		n.carolServer.intersect(createLogFunc("alice->bob->[carol]",
+			n.carolChannelLink.ChanID()))
+	}
+
+	amount := lnwire.NewMSatFromSatoshis(btcutil.SatoshiPerBitcoin)
+	htlcAmt, totalTimelock, hops := generateHops(amount,
+		testStartingHeight,
+		n.firstBobChannelLink, n.carolChannelLink)
+	testChannelPaymentPolicyHelper(t, n, hops, amount, htlcAmt, totalTimelock, 1, false)
+	testChannelPaymentPolicyHelper(t, n, hops, amount, htlcAmt, totalTimelock, 9999999, true)
+	testChannelPaymentPolicyHelper(t, n, hops, amount, htlcAmt, totalTimelock, 1, false)
+}
+
 // TestExitNodeTimelockPayloadMismatch tests that when an exit node receives an
 // incoming HTLC, if the time lock encoded in the payload of the forwarded HTLC
 // doesn't match the expected payment value, then the HTLC will be rejected

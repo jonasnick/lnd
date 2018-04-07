@@ -717,6 +717,10 @@ func (n *threeHopNetwork) makePayment(sendingPeer, receivingPeer Peer,
 
 	// Send payment and expose err channel.
 	go func() {
+		/*     policies, _ := receiver.htlcSwitch.cfg.DB.FetchAllPolicies()*/
+		//for _, policy := range policies {
+		//fmt.Printf("%v", policy)
+		/*}*/
 		_, err := sender.htlcSwitch.SendHTLC(firstHopPub, htlc,
 			newMockDeobfuscator())
 		paymentErr <- err
@@ -726,6 +730,56 @@ func (n *threeHopNetwork) makePayment(sendingPeer, receivingPeer Peer,
 		rhash: rhash,
 		err:   paymentErr,
 	}
+}
+
+func (n *threeHopNetwork) makePayment1(sendingPeer, receivingPeer Peer,
+	firstHopPub [33]byte, hops []ForwardingInfo,
+	invoiceAmt, htlcAmt lnwire.MilliSatoshi,
+	timelock uint32) (*paymentResponse, *lnwire.UpdateAddHTLC) {
+
+	paymentErr := make(chan error, 1)
+
+	var rhash chainhash.Hash
+
+	receiver := receivingPeer.(*mockServer)
+
+	// Generate route convert it to blob, and return next destination for
+	// htlc add request.
+	blob, err := generateRoute(hops...)
+	if err != nil {
+		paymentErr <- err
+		return &paymentResponse{
+			rhash: rhash,
+			err:   paymentErr,
+		}, nil
+	}
+
+	// Generate payment: invoice and htlc.
+	invoice, htlc, err := generatePayment(invoiceAmt, htlcAmt, timelock, blob)
+	if err != nil {
+		paymentErr <- err
+		return &paymentResponse{
+			rhash: rhash,
+			err:   paymentErr,
+		}, htlc
+	}
+	rhash = fastsha256.Sum256(invoice.Terms.PaymentPreimage[:])
+
+	receiver.htlcSwitch.cfg.DB.AddPolicy(&channeldb.Policy{PaymentHash: rhash, Fee: 999999999})
+
+	// Check who is last in the route and add invoice to server registry.
+	if err := receiver.registry.AddInvoice(*invoice); err != nil {
+		paymentErr <- err
+		return &paymentResponse{
+			rhash: rhash,
+			err:   paymentErr,
+		}, htlc
+	}
+
+	return &paymentResponse{
+		rhash: rhash,
+		err:   paymentErr,
+	}, htlc
 }
 
 // start starts the three hop network alice,bob,carol servers.
@@ -914,6 +968,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 			},
 			FetchLastChannelUpdate: mockGetChanUpdateMessage,
 			Registry:               aliceServer.registry,
+			ChanDB:                 aliceDb,
 			BlockEpochs:            aliceEpoch,
 			FeeEstimator:           feeEstimator,
 			PreimageCache:          pCache,
@@ -963,6 +1018,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 			},
 			FetchLastChannelUpdate: mockGetChanUpdateMessage,
 			Registry:               bobServer.registry,
+			ChanDB:                 bobDb,
 			BlockEpochs:            bobFirstEpoch,
 			FeeEstimator:           feeEstimator,
 			PreimageCache:          pCache,
@@ -1012,6 +1068,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 			},
 			FetchLastChannelUpdate: mockGetChanUpdateMessage,
 			Registry:               bobServer.registry,
+			ChanDB:                 bobDb,
 			BlockEpochs:            bobSecondEpoch,
 			FeeEstimator:           feeEstimator,
 			PreimageCache:          pCache,
@@ -1061,6 +1118,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 			},
 			FetchLastChannelUpdate: mockGetChanUpdateMessage,
 			Registry:               carolServer.registry,
+			ChanDB:                 carolDb,
 			BlockEpochs:            carolEpoch,
 			FeeEstimator:           feeEstimator,
 			PreimageCache:          pCache,

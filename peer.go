@@ -1396,6 +1396,7 @@ out:
 				DebugHTLC:      cfg.DebugHTLC,
 				HodlHTLC:       cfg.HodlHTLC,
 				Registry:       p.server.invoices,
+				ChanDB:         p.server.chanDB,
 				Switch:         p.server.htlcSwitch,
 				Circuits:       p.server.htlcSwitch.CircuitModifier(),
 				ForwardPackets: p.server.htlcSwitch.ForwardPackets,
